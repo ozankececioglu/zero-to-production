@@ -1,16 +1,23 @@
-- Where were we left? 3.5 Writing our first integration test
+- Where were we left? 
+    - 3.5 Writing our first integration test
     - Book repository: https://github.com/LukeMathWalker/zero-to-production.git
     - There are branches for each chapter
 
-- 3.6. refocus
-    - how to read data collected in a HTML form in actix-web (i.e. how do I parse the request body of a POST?);
-    - what libraries are available to work with a PostgreSQL database in Rust (diesel vs sqlx vs tokio-postgres);
-    - how to setup and manage migrations for our database;
-    - how to get our hands on a database connection in our API request handlers;
-    - how to test for side-effects (a.k.a. stored data) in our integration tests;
-    - how to avoid weird interactions between tests when working with a database.
+- 3.6. Refocus: 
+    - Requirement:
+        As a blog visitor,
+        I want to subscribe to the newsletter,
+        So that I can receive email updates when new content is published on the blog.
+    - What we will achieve:
+        - how to read data collected in a HTML form in actix-web (i.e. how do I parse the request body of a POST?);
+        - what libraries are available to work with a PostgreSQL database in Rust (diesel vs sqlx vs tokio-postgres);
+        - how to setup and manage migrations for our database;
+        - how to get our hands on a database connection in our API request handlers;
+        - how to test for side-effects (a.k.a. stored data) in our integration tests;
+        - how to avoid weird interactions between tests when working with a database.
 
 - 3.7 Working With HTML Forms
+
 - 3.7.1 Refining out requirements
     - What information do we need?
         - email
@@ -46,11 +53,70 @@
 3.7.3.2 Form And FromRequest
     - ???
 
-3.7.3.3 Serialisation In Rust: serde
-    - Serde is a framework for serializing and deserializing Rust data structures generically, efficiently and conveniently.
-    - Serde supports: URL query encoding, JSON, YAML, TOML, CSV, Pickle and 16 others. 
+3.7.3.3 Serialization In Rust: serde
+    - SERialization/DEserialization
+    - Serde is a framework for serializing and deserializing most common Rust data structures 
+        - generically: Serde only defines the traits, it does not provide any particular implementation. Each data format is supported by a separate crate (serde_json, serde_urlencoded etc...)
+        - efficiently:  Monomorphization is the process of turning generic code into specific code by filling in the concrete types that are used, in compile time
+        - conveniently: [derive(Serialize)] and #[derive(Deserialize)], automatically generate the code for serialization and deserialization. 
+    - Serde supports: URL query encoding, JSON, YAML, TOML, CSV, Pickle and 16 others. (including binary formats)
 
-- 3.8 Storing Data: Databases
+3.8 Storing Data: Databases
+    Anything that we save on disk would only be available to one of the many replicas of our application. 
+    Furthermore, it would probably disappear if the underlying host crashed. 
+    This explains why Cloud-native applications are usually stateless: their persistence needs are delegated to specialized external systems - databases.
+
+3.8.1 Choosing A Database
+    - If you are uncertain about your persistence requirements, use a relational database.
+      If you have no reason to expect massive scale, use PostgreSQ
+
+    - From a data-model perspective, the NoSQL movement has brought us document-stores (e.g. MongoDB),
+        - Key-value stores (e.g. AWS DynamoDB), graph databases (e.g. Neo4J), etc.
+        - We have databases that use RAM as their primary storage (e.g. Redis).
+        - We have databases that are optimized for analytical queries via columnar storage (e.g. AWS RedShift).
+
+3.8.2 Choosing A Database Crate
+    - Most used creates for interacting with a PostgreSQL database:
+        - tokio-postgres
+        - sqlx
+        - diesel
+    - What should we consider when picking one?
+        - Compile-time safety: catch errors at compile time (sqlx and diesel)
+        - SQL-first vs a Domain specific language (DSL) for query building: 
+            - SQL-first: write SQL queries and have them checked at compile time (sqlx and diesel)
+            - DSL: write Rust code that is then translated into SQL queries (tokio-postgres)
+                fn main() {
+                    use self::schema::posts::dsl::*;
+
+                    let connection = &mut establish_connection();
+                    let results = posts
+                        .filter(published.eq(true))
+                        .limit(5)
+                        .select(Post::as_select())
+                        .load(connection)
+                        .expect("Error loading posts");
+                }
+        - async vs sync interface (sqlx and tokio-postgresql)
+    
+3.8.3 Integration Testing With Side-effects
+    - Previous integration tests were stateless, they did not interact with the database to check if the data was stored correctly.
+    - There are 2 options to check for side-effects:
+        - leverage another endpoint of our public API to inspect the application state: Needs another api endpoint, which we don't have currently
+        - query directly the database in our test case: Let's pick this temporarily, we will fix it later when there is a  
+
+3.8.4 Database Setup
+    - a running Postgres instance12;
+    - a table to store our subscribers data.
+
+3.8.4.1 Docker
+    - write a bash script for initializing the database
+
+3.8.4.2 Database Migration
+    - Database migration is the process of transforming a database from one state to another.
+    - sqlx has a built-in migration tool, sqlx-cli (other crates have too)
+    - To install  
+        sqlx setup, cargo install --version="~0.7" sqlx-cli --no-default-features --features rustls,postgres
+
 
 
 psql setup, $env:PATH += ";C:\Program Files\PostgreSQL\16\bin"
