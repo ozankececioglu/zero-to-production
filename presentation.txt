@@ -1,0 +1,57 @@
+- Where were we left? 3.5 Writing our first integration test
+    - Book repository: https://github.com/LukeMathWalker/zero-to-production.git
+    - There are branches for each chapter
+
+- 3.6. refocus
+    - how to read data collected in a HTML form in actix-web (i.e. how do I parse the request body of a POST?);
+    - what libraries are available to work with a PostgreSQL database in Rust (diesel vs sqlx vs tokio-postgres);
+    - how to setup and manage migrations for our database;
+    - how to get our hands on a database connection in our API request handlers;
+    - how to test for side-effects (a.k.a. stored data) in our integration tests;
+    - how to avoid weird interactions between tests when working with a database.
+
+- 3.7 Working With HTML Forms
+- 3.7.1 Refining out requirements
+    - What information do we need?
+        - email
+        - name
+        - otherwise 400 BAD REQUEST
+    - Html form content-type
+        - application/x-www-form-urlencoded (key-value pairs encoded in the body of the request as url encoded)
+        - others: text/plain, application/json, application/xml, multipart/form-data
+
+- 3.7.2 Capturing Our Requirements As Tests
+    - test driven development
+    - subscribe_returns_a_200_for_valid_form_data
+    - subscribe_returns_a_400_when_data_is_missing
+    - parameterized tests, show a rstest example
+
+- 3.7.3 Parsing Form Data From A POST Request
+    - adding a new route
+
+- 3.7.3.1 Extractors
+    - Use cases
+        - Type-safe information extraction from requests
+        - Path to get dynamic path segments from a request’s path
+        - Query for query parameters
+        - Json to parse a JSON-encoded request body
+    - Form extractor, web::Form<> -> request body is url encoded
+    - Other Extractors
+        - web::Path<> -> www.example.com/users/{user_id}/friends/{friend_id}
+        - web::Query<> -> www.example.com/users?sort={sort_id}&limit={limit_id}
+        - web::Json<> -> request body is JSON
+        - web::Data<> -> application state
+        - web::Bytes -> request body as bytes
+
+3.7.3.2 Form And FromRequest
+    - ???
+
+3.7.3.3 Serialisation In Rust: serde
+    - Serde is a framework for serializing and deserializing Rust data structures generically, efficiently and conveniently.
+    - Serde supports: URL query encoding, JSON, YAML, TOML, CSV, Pickle and 16 others. 
+
+- 3.8 Storing Data: Databases
+
+
+psql setup, $env:PATH += ";C:\Program Files\PostgreSQL\16\bin"
+sqlx setup, cargo install --version="~0.7" sqlx-cli --no-default-features --features rustls,postgres
