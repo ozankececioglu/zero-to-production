@@ -113,7 +113,7 @@ async fn subscribe_returns_a_400_when_data_is_missing(#[case] test_case: (&str, 
 
 ### 3.7.3 Parsing Form Data From A POST Request
 
-- We need a new route for subscriptions
+- First, we need a new route for subscriptions
 
 ```rust
 // Let's start simple: we always return a 200 OK
@@ -274,39 +274,67 @@ This explains why Cloud-native applications are usually stateless: their persist
 ### 3.8.2 Choosing A Database Crate
 
 - Most used creates for interacting with a PostgreSQL database:
-  - tokio-postgres
-  - sqlx
-  - diesel
-
----
+  - tokio-postgres (425,578)
+  - sqlx (849,174)
+  - diesel (332,126)
 
 - What should we consider when picking one?
-  - Compile-time safety: catch errors at compile time (sqlx and diesel)
-  - SQL-first vs a Domain specific language (DSL) for query building: 
-    - SQL-first: write SQL queries and have them checked at compile time \
-    (sqlx and tokio-postgres)
-    - DSL: write Rust code that is then translated into SQL queries \
-    (diesel)
-    ```rust
-        fn main() {
-            use self::schema::posts::dsl::*;
-
-            let connection = &mut establish_connection();
-            let results = posts
-                .filter(published.eq(true))
-                .limit(5)
-                .select(Post::as_select())
-                .load(connection)
-                .expect("Error loading posts");
-        }
-    ```
-    - async vs sync interface (sqlx and tokio-postgresql)
+  - Compile-time safety
+  - Query Interface
+  - Async support
 
 ---
-    
+
+What should we consider when picking one? (1/3)
+
+- Compile-time safety: (sqlx and diesel)
+  - Catch errors at compile time
+  - Detect typos in sql queries
+  - Change a column name in the database, but forgot reflecting to code in one of the queries
+
+---
+
+What should we consider when picking one? (2/3)
+
+- Query Interface:
+  - SQL-first: (sqlx and tokio-postgres)\
+    Write direct SQL queries inside rust code \
+    advantages: fast, reliable \
+    disadvantages: database dependant
+
+  - DSL: (diesel) \
+  write Rust code which is implicitly translated to sql \
+  advantages: database independent \
+  disadvantages: might be slow with complex queries, can't fine tune
+  ```rust
+      fn main() {
+          use self::schema::posts::dsl::*;
+
+          let connection = &mut establish_connection();
+          let results = posts
+              .filter(published.eq(true))
+              .limit(5)
+              .select(Post::as_select())
+              .load(connection)
+              .expect("Error loading posts");
+      }
+  ```
+
+---
+
+What should we consider when picking one? (3/3)
+
+- Async support: \
+  Threads are for working in parallel, async is for waiting in parallel.
+  - tokio-postgres and sqlx have built-in support
+  - diesel doesn't have build-in async support, needs a thread pool, which might be costly. \
+  (although a separate create, diesel-async, has been released very recently, v0.4)
+
+---
+
 ### 3.8.3 Integration Testing With Side-effects
 
-- Previous integration tests were stateless, they did not interact with the database to check if the data was stored correctly.
+- The first integration tests in this chapter were stateless, they did not interact with the database to check if the data was stored correctly.
 - There are 2 options to check for side-effects:
   - leverage another endpoint of our public API to inspect the application state: Needs another api endpoint, which we don't have currently
   - query directly the database in our test case: Let's pick this temporarily, we will go back to first option later
