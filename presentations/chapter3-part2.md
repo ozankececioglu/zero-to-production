@@ -63,60 +63,191 @@ date: 02 Feb 2024
   - email
   - name
   - if either is missing, 400 BAD REQUEST
-- Html form content-type
-  - `application/x-www-form-urlencoded` \
+- Html form, content-type: `application/x-www-form-urlencoded` \
   (key-value pairs encoded in the body of the request as url encoded)
-  - other options: `text/plain`, `application/json`, `application/xml`
+- Other options
+  - Html form, content-type: `text/plain`, `application/json` or `application/xml`
+  - Query string
 
---- 
-
+---
 
 ### 3.7.2 Capturing Our Requirements As Tests
 
 - test driven development
 - `subscribe_returns_a_200_for_valid_form_data`
 - `subscribe_returns_a_400_when_data_is_missing`
-- parameterized tests, show a rstest example
+- parameterized tests, rstest does it better
 
---- 
+---
+
+rstest version
+
+``` rust
+#[rstest]
+#[case(("name=le%20guin", "missing the email"))]
+#[case(("email=ursula_le_guin%40gmail.com", "missing the name"))]
+#[case(("", "missing both name and email"))]
+async fn subscribe_returns_a_400_when_data_is_missing(#[case] test_case: (&str, &str)) {
+    let app = spawn_app().await;
+    let client = request::Client::new();
+
+    let (invalid_body, error_message) = test_case
+    let response = client
+        .post(&format!("{}/subscriptions", &app.address))
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(invalid_body)
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    assert_eq!(
+        400,
+        response.status().as_u16(),
+        "The API did not fail with 400 Bad Request when the payload was {}.",
+        error_message
+    );
+}
+```
+
+---
 
 ### 3.7.3 Parsing Form Data From A POST Request
 
-- adding a new route
+- We need a new route for subscriptions
+
+```rust
+// Let's start simple: we always return a 200 OK
+async fn subscribe() -> HttpResponse {
+  HttpResponse::Ok().finish()
+}
+
+pub fn run(listener: TcpListener, db_pool: PgPool) -> Result<Server, std::io::Error> {
+    let db_pool = Data::new(db_pool);
+    let server = HttpServer::new(move || {
+        App::new()
+            .route("/health_check", web::get().to(health_check))
+            .route("/subscriptions", web::post().to(subscribe))
+            .app_data(db_pool.clone())
+    })
+    .listen(listener)?
+    .run();
+    Ok(server)
+}
+```
 
 ---
 
 ### 3.7.3.1 Extractors
 
-- Use cases
+- Some use cases
   - Type-safe information extraction from requests
   - Path to get dynamic path segments from a request’s path
   - Query for query parameters
   - Json to parse a JSON-encoded request body
-- Form extractor, web::Form<>  =>  request body is url encoded
-- Other Extractors
-  - `web::Path<>` => `www.example.com/users/{user_id}/friends/{friend_id}`
-  - `web::Query<>` => `www.example.com/users?sort={sort_id}&limit={limit_id}`
-  - `web::Json<>` => request body is JSON
-  - `web::Data<>` => application state
-  - `web::Bytes` => request body as bytes
+  
+- Form extractor, `web::Form<YourType>` \
+  Parses the request body according to the contents your type.
+
+``` rust
+#[derive(serde::Deserialize)]
+pub struct FormData {
+    email: String,
+    name: String,
+}
+
+pub async fn subscribe(form: web::Form<FormData>) -> HttpResponse {
+  println!("{} {}", form.email, form.name);
+  HttpResponse::Ok().finish()
+}
+```
+
+---
+
+Other kind of Extractors
+
+- `web::Path<>` => Parses path parameters: `www.example.com/users/{user_id}/friends/{friend_id}`
+- `web::Query<>` => Parses query parameters: `www.example.com/users?sort={sort_id}&limit={limit_id}`
+- `web::Json<>` => Parses JSON encoded request body  
+- `web::Header<>` => Parses request headers
+- `web::Data<>` => Access to application state
+- `web::Bytes` => Access to request body as bytes
 
 ---
 
 ### 3.7.3.2 Form And FromRequest
 
-- ???
+``` rust
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+pub struct Form<T>(pub T);
+```
+
+``` rust
+pub trait FromRequest: Sized {
+  type Error = Into<actix_web::Error>;
+
+  async fn from_request(
+    req: &HttpRequest,
+    payload: &mut Payload
+  ) -> Result<Self, Self::Error>
+}
+```
+
+``` rust
+impl<T> FromRequest for Form<T>
+where T: DeserializeOwned + 'static,
+{
+  type Error = actix_web::Error;
+  async fn from_request(
+    req: &HttpRequest,
+    payload: &mut Payload
+  ) -> Result<Self, Self::Error> {
+    // Omitted stuff around extractor configuration (e.g. payload size limits)
+    match UrlEncoded::new(req, payload).await {
+      Ok(item) => Ok(Form(item)),
+      // The error handler can be customized.
+      Err(e) => Err(error_handler(e))
+    }
+  }
+}
+```
 
 ---
 
 ### 3.7.3.3 Serialization In Rust: serde
 
 - SERialization/DEserialization
-- Serde is a framework for serializing and deserializing most common Rust data structures 
+- Serde is the most popular serialization and deserialization framework for common Rust data structures
   - generically: Serde only defines the traits, it does not provide any particular implementation. Each data format is supported by a separate crate (serde_json, serde_urlencoded etc...)
   - efficiently:  Monomorphization is the process of turning generic code into specific code by filling in the concrete types that are used, in compile time
-  - conveniently: `#[derive(Serialize)]` and `#[derive(Deserialize)]`, automatically generate the code for serialization and deserialization. 
+  - conveniently: `#[derive(Serialize)]` and `#[derive(Deserialize)]`, automatically generate the code for serialization and deserialization.
 - Serde supports: URL query encoding, JSON, YAML, TOML, CSV, Pickle and 16 others. (including binary formats)
+
+---
+
+Serde example
+
+``` rust
+use serde::{Deserialize, Serialize};
+use serde_json::Result;
+
+#[derive(Serialize, Deserialize)]
+struct Person {
+    name: String,
+    age: u8,
+    phones: Vec<String>,
+}
+
+fn parse_person() -> Result<()> {
+    let data = r#"
+        {
+            "name": "John Doe",
+            "age": 43,
+            "phones": [ "+44 1234567" ]
+        }"#;
+    let p: Person = serde_json::from_str(data)?;
+    Ok(())
+}
+```
 
 ---
 
@@ -178,7 +309,7 @@ This explains why Cloud-native applications are usually stateless: their persist
 - Previous integration tests were stateless, they did not interact with the database to check if the data was stored correctly.
 - There are 2 options to check for side-effects:
   - leverage another endpoint of our public API to inspect the application state: Needs another api endpoint, which we don't have currently
-  - query directly the database in our test case: Let's pick this temporarily, we will go back to first option later when we write an endpoint
+  - query directly the database in our test case: Let's pick this temporarily, we will go back to first option later
 
 ---
 
