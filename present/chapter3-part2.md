@@ -519,7 +519,7 @@ let connection = PgConnection::connect(&connection_string)
 
 ---
 
-- Finally we can add an sql check in our tests, to see if the data is really written to the database (3.8.3)
+- Finally we can add an sql query in our tests, to see if the data is really written to the database (3.8.3)
 
 ``` rust
 //! tests/health_check.rs
@@ -539,3 +539,6 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
   assert_eq!(saved.name, "le guin");
 }
 ```
+
+### 3.9 Persisting A New Subscriber
+
