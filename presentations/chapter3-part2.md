@@ -343,25 +343,180 @@ What should we consider when picking one? (3/3)
 
 ### 3.8.4 Database Setup
 
-- a running Postgres instance;
-- a table to store our subscribers data.
+- a running Postgres instance, using docker
+- a database table to store our subscribers data
 
 ---
 
 ### 3.8.4.1 Docker
 
-- write a bash script for initializing the database
+- Write a bash script for initializing the database
+
+``` sh
+docker run \
+  -e POSTGRES_USER=${DB_USER} \
+  -e POSTGRES_PASSWORD=${DB_PASSWORD} \
+  -e POSTGRES_DB=${DB_NAME} \
+  -p "${DB_PORT}":5432 \
+  -d postgres \
+  postgres -N 1000
+```
+
+- Check if docker instance is up and postgresql is ready and running.
+
+``` sh
+# Keep pinging Postgres until it's ready to accept commands
+export PGPASSWORD="${DB_PASSWORD}"
+until psql -h "localhost" -U "${DB_USER}" -p "${DB_PORT}" -d "postgres" -c '\q'; do
+  >&2 echo "Postgres is still unavailable - sleeping"
+  sleep 1
+done
+```
+
 
 ---
 
-### 3.8.4.2 Database Migration
+### 3.8.4.2 Database Migrations
 
-- Database migration is the process of transforming a database from one state to another.
-- sqlx has a built-in migration tool, sqlx-cli (other crates have too)
-- To install  
-    sqlx setup, cargo install --version="~0.7" sqlx-cli --no-default-features --features rustls,postgres
+- Database migration is the process of transforming the database schema from one state to another. \
+They are kind of a version control system for database schemas.
+
+- sqlx has a built-in migration tool called sqlx-cli (other crates have similar tools, too)
+- Install sqlx-cli, not included in the sqlx crate
+
+``` sh
+    cargo install --version="~0.7" sqlx-cli --no-default-features --features rustls,postgres
+```
+
+- Create the database using sqlx-cli
+
+``` sh
+DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@localhost:${DB_PORT}/${DB_NAME}
+export DATABASE_URL
+sqlx database create
+```
 
 ---
 
-psql setup, $env:PATH += ";C:\Program Files\PostgreSQL\16\bin"
-sqlx setup, cargo install --version="~0.7" sqlx-cli --no-default-features --features rustls,postgres
+- Let's create our first migration
+
+``` sh
+sqlx migrate add create_subscriptions_table
+```
+
+- This will create a folder called migrations, and create an sql file called {timestamp}_create_subscriptions_table.sql. \
+  We should put the necessary sql statement for creating the subscriptions table there
+
+``` sql
+-- Create Subscriptions Table
+-- We are enforcing that all fields should be populated with a NOT NULL constraint on each column
+-- We are enforcing email uniqueness at the database-level with a UNIQUE constraint
+CREATE TABLE subscriptions(
+  id uuid NOT NULL,
+  PRIMARY KEY (id),
+  email TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  subscribed_at timestamptz NOT NULL
+);
+```
+
+- Finally, run/apply the migration(s)
+
+``` sh
+sqlx migrate run
+```
+
+--- 
+
+### 3.8.5 Writing Our First Query
+
+- Necessary sqlx features in cargo.toml
+
+``` toml
+[dependencies.sqlx]
+version = "0.6"
+default-features = false
+features = [
+  "runtime-tokio-rustls", # sqlx uses the tokio runtime for its futures and rustls as TLS backend
+  "macros", # macro support, sqlx::query! and qlx::query_as! 
+  "postgres", # non-standard postgres types
+  "uuid", # enable SQL uuid type, using another crate
+  "chrono", # mapping SQL timestamptz to the DateTime<T>
+  "migrate", # enable migrations even without sqlx-cli
+]
+
+```
+
+---
+
+- For configuration management, we rely on `config` crate (735,744). \
+  All the relevant application parameters are going to be kept in configuration.yaml file. \
+  (Kept plain text?).
+
+``` rust
+// src/configuration.rs
+#[derive(serde::Deserialize)]
+pub struct Settings {
+  pub database: DatabaseSettings,
+  pub application_port: u16
+}
+
+#[derive(serde::Deserialize)]
+pub struct DatabaseSettings {
+  pub username: String,
+  pub password: String,
+  pub port: u16,
+  pub host: String,
+  pub database_name: String,
+}
+```
+
+---
+
+- In the very same `configuration.rs` file, let's add a helper for reading configuration. It will be called from main during application start.
+
+``` rust
+pub fn get_configuration() -> Result<Settings, config::ConfigError> {
+  // Initialise our configuration reader
+  let settings = config::Config::builder()
+    // Add configuration values from a file named `configuration.yaml`.
+    .add_source(
+      config::File::new("configuration.yaml", config::FileFormat::Yaml)
+    )
+    .build()?;
+  // Try to convert the configuration values it read into
+  // our Settings type
+  settings.try_deserialize::<Settings>()
+}
+```
+
+---
+
+- Connecting To Postgres is done through `PgConnection::connect`, which needs a single connection string. Let's add a utility function to `DatabaseSettings` for constructing the connection string based on configuration.yml
+
+``` rust
+//! src/configuration.rs
+impl DatabaseSettings {
+pub fn connection_string(&self) -> String {
+  format!(
+    "postgres://{}:{}@{}:{}/{}",
+    self.username, self.password, self.host, self.port, self.database_name
+    )
+  }
+}
+```
+
+- This will create a PgConnection instance, connected to the database:
+
+``` rust
+let connection_string = configuration.database.connection_string();
+// The `Connection` trait MUST be in scope for us to invoke
+// `PgConnection::connect` - it is not an inherent method of the struct!
+let connection = PgConnection::connect(&connection_string)
+  .await
+  .expect("Failed to connect to Postgres.");
+```
+
+---
+
+- Finally we can add checks in our tests, to see if the data is really written to the database (3.8.3)

@@ -7,7 +7,7 @@ function value_or_default($val, $default_val) {
 }
 
 # Check if a custom user has been set, otherwise default to 'postgres'
-$DB_USER = value_or_default $env:ZERO2PROD_POSTGRES_USER "postgress"
+$DB_USER = value_or_default $env:ZERO2PROD_POSTGRES_USER "postgres"
 # Check if a custom password has been set, otherwise default to 'password'
 $DB_PASSWORD = value_or_default $env:ZERO2PROD_POSTGRES_PASSWORD "password"
 # Check if a custom database name has been set, otherwise default to 'newsletter'
