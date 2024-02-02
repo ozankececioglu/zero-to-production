@@ -477,7 +477,7 @@ pub struct DatabaseSettings {
 
 ``` rust
 pub fn get_configuration() -> Result<Settings, config::ConfigError> {
-  // Initialise our configuration reader
+  // Initialize our configuration reader
   let settings = config::Config::builder()
     // Add configuration values from a file named `configuration.yaml`.
     .add_source(
@@ -506,7 +506,7 @@ pub fn connection_string(&self) -> String {
 }
 ```
 
-- This will create a PgConnection instance, connected to the database:
+- Using the connection string, the block below will create a PgConnection instance which is connected to the database:
 
 ``` rust
 let connection_string = configuration.database.connection_string();
@@ -519,4 +519,23 @@ let connection = PgConnection::connect(&connection_string)
 
 ---
 
-- Finally we can add checks in our tests, to see if the data is really written to the database (3.8.3)
+- Finally we can add an sql check in our tests, to see if the data is really written to the database (3.8.3)
+
+``` rust
+//! tests/health_check.rs
+// [...]
+#[tokio::test]
+async fn subscribe_returns_a_200_for_valid_form_data() {
+  // [...]
+  // The connection has to be marked as mutable!
+  let mut connection = ...
+  // Assert
+  assert_eq!(200, response.status().as_u16());
+  let saved = sqlx::query!("SELECT email, name FROM subscriptions",)
+    .fetch_one(&mut connection)
+    .await
+    .expect("Failed to fetch saved subscription.");
+  assert_eq!(saved.email, "ursula_le_guin@gmail.com");
+  assert_eq!(saved.name, "le guin");
+}
+```
