@@ -251,9 +251,10 @@ where T: DeserializeOwned + 'static,
 - SERialization/DEserialization
 - Serde is the most popular serialization and deserialization framework for common Rust data structures
   - generically: Serde only defines the traits, it does not provide any particular implementation. Each data format is supported by a separate crate (serde_json, serde_urlencoded etc...)
-  - efficiently:  Monomorphization is the process of turning generic code into specific code by filling in the concrete types that are used, in compile time
+  - efficiently:  Monomorphization is the process of turning generic code into specific code by filling in the concrete types that are used, in compile time. Zero-Copy, not even a single byte is wasted.
   - conveniently: `#[derive(Serialize)]` and `#[derive(Deserialize)]`, automatically generate the code for serialization and deserialization.
 - Serde supports: URL query encoding, JSON, YAML, TOML, CSV, Pickle and 16 others. (including binary formats)
+- Note: No reflection in rust
 
 ---
 
@@ -575,3 +576,81 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
 
 ### 3.9 Persisting A New Subscriber
 
+- Now it is time to add the insert query to our new route, `subscribe`.
+- To run the insert query, we need to do `PgConnection::connect` for each request! This is not acceptable in a multi-worker environment with hundreds of requests per second.
+- We have to share PgConnection within requests.
+
+---
+
+#### 3.9.1 Application State In actix-web
+
+- We can share data within workers using a specific extractor, `web::Data<PgConnection>`, passing it to the App instance.
+
+``` rust
+let connection = PgConnection::connect(...);
+let connection_data = web::Data::new(connection);
+let server = HttpServer::new(|| {
+  App::new()
+    .route("/health_check", web::get().to(health_check))
+    .route("/subscriptions", web::post().to(subscribe))
+    .app_data(connection.clone())
+})
+```
+
+``` rust
+pub async fn subscribe(
+  _form: web::Form<FormData>,
+  // Retrieving a connection from the application state!
+  _connection: web::Data<PgConnection>,
+) -> HttpResponse {
+  HttpResponse::Ok().finish()
+}
+```
+
+- Each worker gets its own instance of App via the return of the lambda passed to HttpServer.
+
+---
+
+### 3.9.4 The INSERT Query
+
+- Now multiple workers are utilizing the same PgConnection, contesting for it.
+- Slow queries will keep other requests waiting.
+- PgPool comes to the help. It reuses multiple PgConnections within workers and requests.
+
+``` rust
+/// main.rs
+let configuration = get_configuration().expect("Failed to read configuration.");
+// Renamed!
+let connection_pool = PgPool::connect(
+    &configuration.database.connection_string()
+  )
+  .await
+  .expect("Failed to connect to Postgres.");
+```
+
+``` rust
+/// startup.rs
+let db_pool = web::Data::new(connection_pool);
+let server = HttpServer::new(move || {
+  App::new()
+    .route("/health_check", web::get().to(health_check))
+    .route("/subscriptions", web::post().to(subscribe))
+    .app_data(db_pool.clone())
+})
+.listen(listener)?
+.run();
+```
+
+---
+
+### 3.10 Updating Our Tests and 3.10.1 Test Isolation
+
+- After fitting the tests to the new PgPool model, we observe that `subscribe_returns_a_200_for_valid_form_data` fails, \
+  because we can not insert the same value to the database twice, email must be unique.
+- We have  to isolate our tests. There are 2 ways:
+  - Faster: wrap the whole test in a SQL transaction and rollback at the end of it.
+  - Easier: spin up a brand-new logical database for each integration test. (Author picks the easier one this time)
+- To create a new database instance, one needs to connect to the database without a db name in the connection string.
+- We can have a look at `health_check.rs` together.
+
+---
