@@ -80,6 +80,39 @@ date: 02 Feb 2024
 
 ---
 
+``` rust
+#[tokio::test]
+async fn subscribe_returns_a_400_when_data_is_missing() {
+  // Arrange
+  let app_address = spawn_app();
+  let client = reqwest::Client::new();
+  let test_cases = vec![
+    ("name=le%20guin", "missing the email"),
+    ("email=ursula_le_guin%40gmail.com", "missing the name"),
+    ("", "missing both name and email")
+  ];
+  for (invalid_body, error_message) in test_cases {
+    // Act
+    let response = client
+      .post(&format!("{}/subscriptions", &app_address))
+      .header("Content-Type", "application/x-www-form-urlencoded")
+      .body(invalid_body)
+      .send()
+      .await
+      .expect("Failed to execute request.");
+    // Assert
+    assert_eq!(
+      400,
+      response.status().as_u16(),
+      // Additional customised error message on test failure
+      "The API did not fail with 400 Bad Request when the payload was {}.",
+      error_message
+    );
+  }
+}
+```
+---
+
 rstest version
 
 ``` rust
@@ -519,7 +552,7 @@ let connection = PgConnection::connect(&connection_string)
 
 ---
 
-- Finally we can add an sql query in our tests, to see if the data is really written to the database (3.8.3)
+- Finally we can add an select query in our tests, to see if the data is really written to the database (3.8.3)
 
 ``` rust
 //! tests/health_check.rs
