@@ -27,6 +27,10 @@ services:
     routes:
       - path: /
     envs:
+    	# !###18 add base_url
+      - key: APP_APPLICATION__BASE_URL
+        scope: RUN_TIME
+        value: ${APP_URL}
       - key: APP_DATABASE__USERNAME
         scope: RUN_TIME
         value: ${newsletter.USERNAME}
