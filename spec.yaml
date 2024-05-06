@@ -45,6 +45,12 @@ services:
       - key: APP_DATABASE__DATABASE_NAME
         scope: RUN_TIME
         value: ${newsletter.DATABASE}
+      - key: APP_EMAIL_CLIENT__SENDER_EMAIL
+        scope: RUN_TIME
+        value: "test@gmail.com"
+      - key: APP_EMAIL_CLIENT__AUTHORIZATION_TOKEN
+        scope: RUN_TIME
+        value: "my-secret-token"
 databases:
   # PG = Postgres
   - engine: PG
