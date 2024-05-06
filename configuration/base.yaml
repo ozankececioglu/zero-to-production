@@ -9,7 +9,7 @@ database:
   database_name: "newsletter"
   require_ssl: false
 email_client:
-  base_url: "https://api.postmarkapp.com"
-  sender_email: "ozan.kececioglu@nirx.de"
-  authorization_token: "bf4b2639-a89c-49c1-ba0c-42455a881f77"
+  base_url: ""
+  sender_email: ""
+  authorization_token: ""
   timeout_milliseconds: 10000
